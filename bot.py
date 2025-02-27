@@ -1,7 +1,6 @@
 import telebot
 import os, difflib
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
-from PIL import Image, ImageDraw, ImageFont
 from main_ai import check_quran_ayah
 from dotenv import load_dotenv
 
