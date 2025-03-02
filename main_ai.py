@@ -16,7 +16,7 @@ def transcribe_audio(file_path, model):
         if response.status_code == 200:
             return response.json()
         else:
-            return {'error': 'Произошла ошибка, повторите еще раз'}
+            return {'error': f'❌ Ошибка на сервере - {response.status_code}, {response.reason}.\nПовторите еще раз'}
     
 
 # def check_pronunciation(file_path, correct_letter):
