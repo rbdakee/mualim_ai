@@ -1,4 +1,4 @@
-import requests, os
+import requests, os, time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,9 +10,14 @@ QURAN_MODEL = "tarteel-ai/whisper-base-ar-quran"
 HEADERS = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"}
 
 def transcribe_audio(file_path, model):
+    tries = 0
     with open(file_path, "rb") as f:
         data = f.read()
         response = requests.post(f"https://api-inference.huggingface.co/models/{model}", headers=HEADERS, data=data)
+        while response.status_code != 200 and tries<=3:
+            time.sleep(0.5)
+            tries+=1
+            response = requests.post(f"https://api-inference.huggingface.co/models/{model}", headers=HEADERS, data=data)
         if response.status_code == 200:
             return response.json()
         else:
