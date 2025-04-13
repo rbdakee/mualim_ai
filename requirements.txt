@@ -1,3 +1,4 @@
 PyTelegramBotAPI
 requests
 python-dotenv
+sqlalchemy
