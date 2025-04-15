@@ -6,3 +6,4 @@
 !.gitignore
 !files/*
 !files/
+!credentials.json
