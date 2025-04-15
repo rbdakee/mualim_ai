@@ -59,7 +59,7 @@ class User(Base):
     al_fatiha_done = sa.Column(sa.Boolean, nullable=False)
     last_session = sa.Column(sa.DateTime, nullable=False)
     want_trial = sa.Column(sa.Boolean, nullable=False)
-    want_trial_time = sa.Column(sa.DateTime, nullable=False)
+    want_trial_time = sa.Column(sa.DateTime, default=False)
 
 
 Base.metadata.create_all(engine)
