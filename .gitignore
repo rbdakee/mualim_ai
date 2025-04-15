@@ -6,4 +6,5 @@
 !.gitignore
 !files/*
 !files/
+!voices/*
 !voices/
