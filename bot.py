@@ -11,8 +11,14 @@ load_dotenv()
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 bot = TeleBot(TOKEN)
 
+# Загружаем JSON-строку из переменной окружения
+creds_json_str = os.getenv("GOOGLE_CREDS_JSON")
+
+# Преобразуем строку обратно в dict
+creds_dict = json.loads(creds_json_str)
+
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gs_client = gspread.authorize(creds)
 
 # Подключение к таблице
