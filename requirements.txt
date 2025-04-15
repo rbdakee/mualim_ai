@@ -4,3 +4,4 @@ python-dotenv
 sqlalchemy
 gspread
 oauth2client
+psycopg2-binary

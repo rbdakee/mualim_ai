@@ -38,7 +38,7 @@ surah_fatiha = quran_ayahs.get("1", {})  # "1" - номер Аль-Фатихи 
 fatiha_ayahs = [surah_fatiha[str(i)] for i in range(1, len(surah_fatiha) + 1)]
 
 # Настройка базы данных
-DATABASE_URL = "sqlite:///users.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
 engine = sa.create_engine(DATABASE_URL, echo=True)
 Session = sessionmaker(bind=engine)
 session = Session()
@@ -46,7 +46,7 @@ session = Session()
 Base = declarative_base()
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "Users"
     
     chat_id = sa.Column(sa.Integer, primary_key=True)
     phone_number = sa.Column(sa.String, nullable=True)
@@ -59,6 +59,7 @@ class User(Base):
     al_fatiha_done = sa.Column(sa.Boolean, nullable=False)
     last_session = sa.Column(sa.DateTime, nullable=False)
     want_trial = sa.Column(sa.Boolean, nullable=False)
+    want_trial_time = sa.Column(sa.DateTime, nullable=False)
 
 
 Base.metadata.create_all(engine)
@@ -346,6 +347,7 @@ def trial_lesson_handler(call):
     
     if user:
         user.want_trial = True
+        user.want_trial_time = datetime.now()
         session.commit()
         save_user_to_sheet(user)
         text = (
@@ -533,7 +535,7 @@ def save_user_to_sheet(user: User):
         user.al_fatiha_done,
         str(user.last_session),
         user.want_trial,
-        datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        user.want_trial_time.strftime("%d-%m-%Y %H:%M:%S")
     ]
     worksheet.append_row(row)
     text = (f"""
