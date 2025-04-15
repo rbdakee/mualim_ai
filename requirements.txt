@@ -2,3 +2,5 @@ PyTelegramBotAPI
 requests
 python-dotenv
 sqlalchemy
+gspread
+oauth2client

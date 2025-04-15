@@ -1,5 +1,5 @@
-import os, json, difflib, sqlalchemy as sa
-import threading
+import os, json, difflib, gspread, threading, sqlalchemy as sa
+from oauth2client.service_account import ServiceAccountCredentials
 from sqlalchemy.orm import sessionmaker, declarative_base
 from telebot import TeleBot, types
 from datetime import datetime, timedelta
@@ -10,6 +10,14 @@ load_dotenv()
 
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 bot = TeleBot(TOKEN)
+
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+gs_client = gspread.authorize(creds)
+
+# Подключение к таблице
+spreadsheet = gs_client.open("Mualim Users")  # Название таблицы
+worksheet = spreadsheet.sheet1  # Первый лист
 
 # Подключаем файл с аятами
 quran_ayahs_path = "files/quran_ayahs.json"
@@ -77,15 +85,22 @@ def start(message):
             "want_trial": existing_user.want_trial
         }
         
-        if user_data[chat_id].get("al_fatiha_done", False):
-            buttons = [("Редактировать профиль", "edit_profile"), ("Практика Аль-Фатихи", "al_fatiha_practice"),
+        # if user_data[chat_id].get("al_fatiha_done", False):
+        buttons = [("Посмотреть профиль", "edit_profile"), ("Практика Аль-Фатихи", "al_fatiha_practice"),
                ("Записаться на пробный урок", "trial_book")]
-        else:
-            buttons = [("Редактировать профиль", "edit_profile"), ("Практика Аль-Фатихи", "al_fatiha_practice")]
+        # else:
+        #     buttons = [("Редактировать профиль", "edit_profile"), ("Практика Аль-Фатихи", "al_fatiha_practice")]
         bot.send_message(chat_id, f"📌 Добро пожаловать, {existing_user.name}!", reply_markup=create_inline_keyboard(buttons))
     else:
         chat_id = message.chat.id
-        bot.send_message(chat_id, "📌 Добро пожаловать! Перед началом проверки Аль-Фатихи ответьте на несколько вопросов.")
+        txt = (    "🌙 *Добро пожаловать в Mualim* — школу, где каждый может научиться правильно читать Коран с таджвидом, "
+    "даже если вы начинаете с нуля!\n\n"
+    
+    "📖 Мы специализируемся на обучении *таджвиду* — правилам правильного произношения Корана, и делаем это "
+    "в лёгкой, понятной форме. Наши уроки подходят как для начинающих, так и для тех, кто хочет закрепить знания.\n\n"
+)       
+        bot.send_message(chat_id, txt, parse_mode="Markdown")
+        bot.send_message(chat_id, "Давайте познакомимся с вами!")
         msg = bot.send_message(chat_id, "📛 Введите ваше имя:")
         user_data[chat_id] = {}
         user_data[chat_id]["delete"] = [msg.message_id]
@@ -211,6 +226,19 @@ def get_study_target(call):
     bot.delete_message(chat_id, message_id)
     bot.send_message(chat_id, "📱 Пожалуйста, отправьте ваш номер телефона.", reply_markup=keyboard)
 
+@bot.message_handler(func=lambda message: message.chat.id in user_data and "phone_number" not in user_data[message.chat.id])
+def wrong_phone_input(message):
+    chat_id = message.chat.id
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    button = types.KeyboardButton("📞 Отправить номер телефона", request_contact=True)
+    keyboard.add(button)
+    bot.send_message(chat_id,
+        "⚠️ Пожалуйста, *не вводите номер вручную*.\n"
+        "Нажмите кнопку 📞 *«Отправить номер телефона»*, чтобы продолжить.",
+        parse_mode="Markdown", reply_markup=keyboard
+    )
+
+
 @bot.message_handler(content_types=['contact'])
 def get_phone_number(message):
     chat_id = message.chat.id
@@ -265,34 +293,36 @@ def check_practice_timeout(chat_id):
     progress = user_progress.get(chat_id)
     if not progress or progress["lesson"] != "quran_practice":
         return
-    progress['count'] = 0
+    user_progress[chat_id]['count'] = 0
 
     # Проверим, прошло ли 15 минут и практика ещё не завершена
-    if (datetime.now() - progress["start_time"] >= timedelta(minutes=15) and progress['count'] == 0) or (datetime.now() - progress["start_time"] >= timedelta(minutes=30) and progress['count'] == 1):
+    if (datetime.now() - user_progress[chat_id]["start_time"] >= timedelta(minutes=15) and user_progress[chat_id]['count'] == 0) or (datetime.now() - user_progress[chat_id]["start_time"] >= timedelta(minutes=30) and user_progress[chat_id]['count'] == 1):
         # Сохраняем текущие попытки
         update_ayah_attempt(chat_id, progress["attempts"])
-
-        # Удаляем прогресс, чтобы не мешался
-        del user_progress[chat_id]
 
         # Отправляем сообщение
         bot.send_message(chat_id, "⏳ Похоже, вы не завершили практику Аль-Фатихи. Но не переживайте!\n\n"
                                   "👨‍🏫 Вы можете записаться на *пробный урок*, где устаз лично поможет вам.\n"
                                   "Нажмите кнопку ниже, и наш менеджер свяжется с вами.")
         send_trial_lesson_info(chat_id)
-        progress['count']+=1
+        user_progress[chat_id]['count']+=1
 
 
 def send_trial_lesson_info(chat_id):
     text = (
-        "📌 *Группы набираются быстро, поэтому количество пробных уроков ограничено!* "
-        "Сейчас урок можно пройти по акционной цене всего *990 тг* вместо *5000 тг*! 🎉\n\n"
-        "📖 На пробном уроке устаз:\n"
-        "✅ Оценит ваш текущий уровень таджвида\n"
-        "✅ Объяснит, как вы сможете полностью доучить таджвид\n"
-        "✅ Предоставит доступ к *бесплатным материалам* для самостоятельного изучения\n\n"
-        "💡 Если вам интересно, нажмите кнопку ниже, и наш менеджер свяжется с вами!"
-    )
+    "📌 *Группы набираются быстро, поэтому количество пробных уроков ограничено!* "
+    "Сейчас урок можно пройти по акционной цене всего *990 тг* вместо *5000 тг*! 🎉\n\n"
+
+    "📖 На пробном уроке устаз:\n"
+    "✅ Оценит ваш текущий уровень таджвида\n"
+    "✅ Объяснит, как вы сможете полностью доучить таджвид\n"
+    "✅ Предоставит доступ к *бесплатным материалам* для самостоятельного изучения\n\n"
+
+    "⏳ *Специальная цена действует только в течение 24 часов после начала практики!* "
+    "Успейте записаться, пока действует предложение.\n\n"
+
+    "💡 Если вам интересно, нажмите кнопку ниже, и наш менеджер свяжется с вами!"
+)
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("📅 Записаться на пробный урок", callback_data="trial_lesson"))
@@ -311,7 +341,7 @@ def trial_lesson_handler(call):
     if user:
         user.want_trial = True
         session.commit()
-
+        save_user_to_sheet(user)
         text = (
             "⌛ Ожидайте звонка от нашего менеджера в ближайшее время.\n\n"
             "📚 Менеджер расскажет вам подробнее про урок и запишет вас на него.\n"
@@ -344,7 +374,6 @@ def send_next_ayah(chat_id):
             user.al_fatiha_done = True
             session.commit()
         send_trial_lesson_info(chat_id)
-        # update_to_db_lesson_data()
         del user_progress[chat_id]
         return
     audio_ayah = open(f"files/{surah_number}_{index}.mp3", 'rb')
@@ -380,7 +409,7 @@ def handle_voice(message):
 
     file_id = message.voice.file_id
     file_info = bot.get_file(file_id)
-    file_path = f"{chat_id}.ogg"
+    file_path = f"voices/{chat_id}_{datetime.now().timestamp()}.ogg"
 
     downloaded_file = bot.download_file(file_info.file_path)
     with open(file_path, "wb") as f:
@@ -452,7 +481,7 @@ def handle_ayah_voice(progress, file_path, message, chat_id):
             if correct_highlight:
                 user_progress[chat_id]["last_feedback"] = error_message+f"\n\n**{correct_highlight}**\n**{error_highlight}**\n💡 Разбор:\n{feedback}"
                 msg = bot.reply_to(message, error_message, parse_mode="Markdown", reply_markup = markup)
-            else:
+            else:   
                 user_progress[chat_id]["last_feedback"] = error_message+f"\n\nВесь аят был прочитан неверно, но ничего страшного"
                 msg = bot.reply_to(message, error_message, parse_mode="Markdown", reply_markup = markup)
             user_progress[chat_id]['mistake_msg'] = msg.message_id
@@ -462,14 +491,13 @@ def handle_ayah_voice(progress, file_path, message, chat_id):
 def update_ayah_attempt(chat_id: int, attempt_count: int):
     user = session.query(User).filter_by(chat_id=chat_id).first()
     if user:
+        if user.al_fatiha_done:
+            return
         # Берём текущую строку попыток, если нет — создаём
         current_trials = user.al_fatiha_trials or ""
         new_trials = current_trials + ("," if current_trials else "") + str(attempt_count)
         user.al_fatiha_trials = new_trials
         session.commit()
-        print(f"[+] Обновлены попытки для chat_id={chat_id}: {user.al_fatiha_trials}")
-    else:
-        print(f"[!] Пользователь с chat_id={chat_id} не найден в базе.")
 
 
 @bot.callback_query_handler(func=lambda call: call.data in ["check_errors", "next_try"])
@@ -485,6 +513,34 @@ def next_try(call):
         user_progress[chat_id]['mistake_msg'] = None
         bot.edit_message_reply_markup(chat_id, message_id, reply_markup=None)
         send_next_ayah(chat_id)
+
+def save_user_to_sheet(user: User):
+    row = [
+        user.chat_id,
+        user.name,
+        user.age,
+        user.tajweed_studied,
+        user.teacher,
+        user.target,
+        user.phone_number,
+        user.al_fatiha_trials or "",
+        user.al_fatiha_done,
+        str(user.last_session),
+        user.want_trial,
+        datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    ]
+    worksheet.append_row(row)
+    text = (f"""
+*Новый лид*
+ID: {user.chat_id}
+Имя: {user.name}
+Возраст: {user.age}
+Таджвид: {user.tajweed_studied}
+Учился: {user.teacher}
+Цель: {user.target}
+Номер: {user.phone_number}
+""")
+    bot.send_message(-4738611699, text, parse_mode="Markdown")
 
 if __name__ == "__main__":
     print("Bot is running...")

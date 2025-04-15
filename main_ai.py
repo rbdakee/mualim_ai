@@ -15,7 +15,7 @@ def transcribe_audio(file_path, model):
         data = f.read()
         response = requests.post(f"https://api-inference.huggingface.co/models/{model}", headers=HEADERS, data=data)
         while response.status_code != 200 and tries<=3:
-            time.sleep(0.5)
+            time.sleep(0.6)
             tries+=1
             response = requests.post(f"https://api-inference.huggingface.co/models/{model}", headers=HEADERS, data=data)
         if response.status_code == 200:
