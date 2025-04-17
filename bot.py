@@ -46,9 +46,9 @@ session = Session()
 Base = declarative_base()
 
 class User(Base):
-    __tablename__ = "Users"
+    __tablename__ = "users"
     
-    chat_id = sa.Column(sa.Integer, primary_key=True)
+    chat_id = sa.Column(sa.BigInteger, primary_key=True)
     phone_number = sa.Column(sa.String, nullable=True)
     name = sa.Column(sa.String, nullable=False)
     age = sa.Column(sa.Integer, nullable=False)
